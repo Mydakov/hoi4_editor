@@ -70,22 +70,35 @@ class Focus:
         self.title = fid.replace("_", " ").title()
         self.description = ""
         self.icon = "GFX_focus_generic_industry"
-        self.image_file = ""     # путь к своему изображению (опционально)
+        self.image_file = ""
         self.x = 0
         self.y = 0
         self.cost = 10
-        self.prerequisites = []
+        self.prereq_groups = []   # [[a, b], [c]] = (A ИЛИ B) И C
         self.effects = ""
 
+    @property
+    def prerequisites(self):
+        """Плоский вид (для совместимости со старыми сохранениями)."""
+        return [p for group in self.prereq_groups for p in group]
+
     def to_dict(self):
-        return self.__dict__.copy()
+        d = self.__dict__.copy()
+        d["prereq_groups"] = [list(g) for g in self.prereq_groups]
+        return d
 
     @classmethod
     def from_dict(cls, d):
         f = cls(d.get("id", "focus"))
         for k, v in d.items():
+            if k in ("prerequisites", "prereq_groups"):
+                continue
             if hasattr(f, k):
                 setattr(f, k, v)
+        if "prereq_groups" in d:
+            f.prereq_groups = [list(g) for g in (d["prereq_groups"] or [])]
+        elif "prerequisites" in d:
+            f.prereq_groups = [[p] for p in (d["prerequisites"] or [])]
         return f
 
 
@@ -263,6 +276,7 @@ class HOI4Editor:
         self.selected_focus = None
         self.drag = None
         self.connect_mode = False
+        self.connect_logic = tk.StringVar(value="AND")
         self.connect_src = None
         self.cv_items = {}
         self.focus_previews = {}   # fid -> PhotoImage (canvas refs)
@@ -351,7 +365,18 @@ class HOI4Editor:
         Tooltip(b_add, "Создать новый фокус.")
         self.b_connect = ttk.Button(tb, text="🔗 Соединить", command=self.toggle_connect)
         self.b_connect.pack(side=tk.LEFT, padx=2)
-        Tooltip(self.b_connect, "Режим соединения: клик на предпосылку, затем на зависимый.")
+        Tooltip(self.b_connect, "Режим соединения: клик на ПРЕДПОСЫЛКУ, затем на ЗАВИСИМЫЙ.")
+
+        ttk.Label(tb, text=" Логика:").pack(side=tk.LEFT)
+        rb_and = ttk.Radiobutton(tb, text="AND", variable=self.connect_logic, value="AND")
+        rb_and.pack(side=tk.LEFT)
+        Tooltip(rb_and, "Новая связь = ОТДЕЛЬНАЯ группа.\n"
+                        "Пример: A AND B — оба обязательны.")
+        rb_or = ttk.Radiobutton(tb, text="OR", variable=self.connect_logic, value="OR")
+        rb_or.pack(side=tk.LEFT)
+        Tooltip(rb_or, "Новая связь = В ПОСЛЕДНЮЮ группу (OR).\n"
+                       "Пример: A OR B — достаточно любой.\n"
+                       "Если групп нет — создастся новая.")
         b_del = ttk.Button(tb, text="🗑 Удалить", command=self.focus_delete)
         b_del.pack(side=tk.LEFT, padx=2)
         b_dup = ttk.Button(tb, text="📋 Дублировать", command=self.focus_dup)
@@ -466,13 +491,28 @@ class HOI4Editor:
         self.f_desc = tk.Text(basic, height=3, wrap=tk.WORD)
         self.f_desc.pack(fill=tk.X, pady=2)
 
-        ttk.Label(basic, text="Предпосылки (из связей):").pack(anchor=tk.W, pady=(6, 0))
+        ttk.Label(basic, text="Предпосылки:").pack(anchor=tk.W, pady=(6, 0))
+        ttk.Label(basic, text="OR внутри группы · AND между группами",
+                  font=("", 8), foreground="#666").pack(anchor=tk.W)
         pf = ttk.Frame(basic); pf.pack(fill=tk.BOTH, expand=True, pady=2)
-        self.f_prereq = tk.Listbox(pf, height=3, exportselection=False)
+        self.f_prereq = ttk.Treeview(pf, columns=(), show="tree", height=5)
         ps = ttk.Scrollbar(pf, orient=tk.VERTICAL, command=self.f_prereq.yview)
         self.f_prereq.config(yscrollcommand=ps.set)
         self.f_prereq.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         ps.pack(side=tk.RIGHT, fill=tk.Y)
+
+        btn_row = ttk.Frame(basic); btn_row.pack(fill=tk.X, pady=2)
+        b1 = ttk.Button(btn_row, text="➕ AND-группа", command=self.prereq_add_group)
+        b1.pack(side=tk.LEFT, padx=1)
+        Tooltip(b1, "Создать новую AND-группу с одним фокусом.\n"
+                    "Если таких групп несколько — все обязательны.")
+        b2 = ttk.Button(btn_row, text="➕ OR в группу", command=self.prereq_add_or)
+        b2.pack(side=tk.LEFT, padx=1)
+        Tooltip(b2, "Добавить фокус как OR к выбранной группе.\n"
+                    "Сначала выдели группу в дереве.")
+        b3 = ttk.Button(btn_row, text="🗑 Удалить", command=self.prereq_delete)
+        b3.pack(side=tk.LEFT, padx=1)
+        Tooltip(b3, "Удалить выбранную группу или элемент.")
 
         # --- эффекты (категоризированные)
         ttk.Label(eff, text="Быстрые эффекты по категориям:").pack(anchor=tk.W)
@@ -654,26 +694,33 @@ class HOI4Editor:
     def _redraw_connections(self):
         self.canvas.delete("conn")
         for f in self.focuses.values():
-            for pre_id in f.prerequisites:
-                if pre_id not in self.focuses:
+            for group in f.prereq_groups:
+                valid = [p for p in group if p in self.focuses]
+                if not valid:
                     continue
-                p = self.focuses[pre_id]
-                sx = p.x * self.GRID_X + self.GRID_X // 2
-                sy = p.y * self.GRID_Y + self.GRID_Y // 2 + self.FH // 2
-                ex = f.x * self.GRID_X + self.GRID_X // 2
-                ey = f.y * self.GRID_Y + self.GRID_Y // 2 - self.FH // 2
-                if abs(sx - ex) < 2:
-                    self.canvas.create_line(sx, sy, ex, ey, fill="#88ccff", width=2,
-                                             arrow=tk.LAST, tags="conn")
-                else:
-                    my = (sy + ey) / 2
-                    self.canvas.create_line(sx, sy, sx, my, fill="#88ccff", width=2, tags="conn")
-                    self.canvas.create_line(sx, my, ex, my, fill="#88ccff", width=2, tags="conn")
-                    self.canvas.create_line(ex, my, ex, ey, fill="#88ccff", width=2,
-                                             arrow=tk.LAST, tags="conn")
+                is_or = len(valid) > 1
+                color = "#ffaa44" if is_or else "#88ccff"
+                dash = (6, 4) if is_or else None
+                for pre_id in valid:
+                    p = self.focuses[pre_id]
+                    sx = p.x * self.GRID_X + self.GRID_X // 2
+                    sy = p.y * self.GRID_Y + self.GRID_Y // 2 + self.FH // 2
+                    ex = f.x * self.GRID_X + self.GRID_X // 2
+                    ey = f.y * self.GRID_Y + self.GRID_Y // 2 - self.FH // 2
+                    if abs(sx - ex) < 2:
+                        self.canvas.create_line(sx, sy, ex, ey, fill=color, width=2,
+                                                 arrow=tk.LAST, dash=dash, tags="conn")
+                    else:
+                        my = (sy + ey) / 2
+                        self.canvas.create_line(sx, sy, sx, my, fill=color, width=2,
+                                                 dash=dash, tags="conn")
+                        self.canvas.create_line(sx, my, ex, my, fill=color, width=2,
+                                                 dash=dash, tags="conn")
+                        self.canvas.create_line(ex, my, ex, ey, fill=color, width=2,
+                                                 arrow=tk.LAST, dash=dash, tags="conn")
         self.canvas.tag_lower("conn")
         self.canvas.tag_lower("grid")
-
+        
     def _redraw_all(self):
         for fid in list(self.cv_items.keys()):
             for it in self.cv_items[fid].values():
@@ -705,16 +752,31 @@ class HOI4Editor:
             if self.connect_src is None:
                 self.connect_src = clicked
                 self._highlight(clicked, "yellow")
-                self.set_hint("Источник: «" + clicked + "». Кликните зависимый фокус.")
+                self.set_hint("Источник: «" + clicked + "» (ПРЕДПОСЫЛКА). Кликните зависимый фокус.")
             else:
                 if clicked != self.connect_src:
-                    p = self.focuses[self.connect_src]
-                    if clicked not in p.prerequisites:
-                        p.prerequisites.append(clicked)
+                    target = self.focuses[clicked]   # зависимый
+                    src_id = self.connect_src        # предпосылка
+                    mode = self.connect_logic.get()
+                    added = False
+                    if mode == "AND":
+                        if not any(src_id in g for g in target.prereq_groups):
+                            target.prereq_groups.append([src_id])
+                            added = True
+                    else:  # OR
+                        if target.prereq_groups:
+                            last = target.prereq_groups[-1]
+                            if src_id not in last:
+                                last.append(src_id)
+                                added = True
+                        else:
+                            target.prereq_groups.append([src_id])
+                            added = True
+                    if added:
                         self._redraw_connections()
-                        self.status_var.set("Связь: " + self.connect_src + " → " + clicked)
+                        self.status_var.set("Связь [" + mode + "]: " + src_id + " → " + clicked)
                         self.set_hint("Связь создана. Ещё одна или выключите режим.")
-                        if self.selected_focus == self.connect_src:
+                        if self.selected_focus == clicked:
                             self._refresh_prereq_list()
                     else:
                         self.set_hint("Такая связь уже есть.")
@@ -798,11 +860,89 @@ class HOI4Editor:
             self.canvas.itemconfig(items["rect"], outline=color, width=width)
 
     def _refresh_prereq_list(self):
-        self.f_prereq.delete(0, tk.END)
-        if self.selected_focus:
-            for p in self.focuses[self.selected_focus].prerequisites:
-                self.f_prereq.insert(tk.END, p)
+        for item in self.f_prereq.get_children():
+            self.f_prereq.delete(item)
+        if not self.selected_focus:
+            return
+        f = self.focuses[self.selected_focus]
+        for gi, group in enumerate(f.prereq_groups):
+            if not group:
+                continue
+            logic = "OR" if len(group) > 1 else "AND"
+            gid = self.f_prereq.insert("", "end",
+                text="Группа #" + str(gi + 1) + " [" + logic + "]",
+                open=True, tags=("group", str(gi)))
+            for ii, pid in enumerate(group):
+                marker = "•" if pid in self.focuses else "⚠"
+                self.f_prereq.insert(gid, "end",
+                    text="   " + marker + " " + pid,
+                    tags=("item", str(gi), str(ii)))
 
+    def prereq_add_group(self):
+        if not self.selected_focus:
+            return
+        fid = simpledialog.askstring("AND-группа",
+            "ID фокуса-предпосылки (обязателен):", parent=self.root)
+        if not fid:
+            return
+        fid = fid.strip()
+        if fid not in self.focuses:
+            messagebox.showerror("Ошибка", "Такого фокуса нет.")
+            return
+        if fid == self.selected_focus:
+            messagebox.showerror("Ошибка", "Фокус не может быть своей предпосылкой.")
+            return
+        self.focuses[self.selected_focus].prereq_groups.append([fid])
+        self._refresh_prereq_list()
+        self._redraw_connections()
+
+    def prereq_add_or(self):
+        if not self.selected_focus:
+            return
+        sel = self.f_prereq.selection()
+        if not sel:
+            messagebox.showinfo("OR", "Выдели группу в дереве, к которой добавить OR.")
+            return
+        tags = self.f_prereq.item(sel[0], "tags")
+        gi = int(tags[1])
+        fid = simpledialog.askstring("OR-элемент",
+            "ID фокуса (достаточно любого из группы):", parent=self.root)
+        if not fid:
+            return
+        fid = fid.strip()
+        if fid not in self.focuses:
+            messagebox.showerror("Ошибка", "Такого фокуса нет.")
+            return
+        if fid == self.selected_focus:
+            messagebox.showerror("Ошибка", "Фокус не может быть своей предпосылкой.")
+            return
+        group = self.focuses[self.selected_focus].prereq_groups[gi]
+        if fid in group:
+            messagebox.showinfo("OR", "Этот фокус уже в группе.")
+            return
+        group.append(fid)
+        self._refresh_prereq_list()
+        self._redraw_connections()
+
+    def prereq_delete(self):
+        if not self.selected_focus:
+            return
+        sel = self.f_prereq.selection()
+        if not sel:
+            return
+        tags = self.f_prereq.item(sel[0], "tags")
+        gi = int(tags[1])
+        f = self.focuses[self.selected_focus]
+        if tags[0] == "group":
+            del f.prereq_groups[gi]
+        else:
+            ii = int(tags[2])
+            del f.prereq_groups[gi][ii]
+            if not f.prereq_groups[gi]:
+                del f.prereq_groups[gi]
+        self._refresh_prereq_list()
+        self._redraw_connections()
+        
     def _refresh_focus_list(self):
         self.focus_list.delete(0, tk.END)
         for fid in sorted(self.focuses):
@@ -862,7 +1002,7 @@ class HOI4Editor:
         d = src.to_dict()
         d["id"] = fid
         d["x"] = src.x + 1
-        d["prerequisites"] = []
+        d["prereq_groups"] = []
         new_f = Focus.from_dict(d)
         self.focuses[fid] = new_f
         self._refresh_focus_list()
@@ -889,7 +1029,10 @@ class HOI4Editor:
             f.id = new_id
             self.focuses[new_id] = f
             for other in self.focuses.values():
-                other.prerequisites = [new_id if p == old else p for p in other.prerequisites]
+                other.prereq_groups = [
+                    [new_id if p == old else p for p in g]
+                    for g in other.prereq_groups
+                ]
             self.selected_focus = new_id
             if f.image_file and f.icon.startswith("GFX_focus_"):
                 f.icon = "GFX_focus_" + new_id
@@ -929,7 +1072,10 @@ class HOI4Editor:
             return
         del self.focuses[fid]
         for other in self.focuses.values():
-            other.prerequisites = [p for p in other.prerequisites if p != fid]
+            other.prereq_groups = [
+                [p for p in g if p != fid] for g in other.prereq_groups
+            ]
+            other.prereq_groups = [g for g in other.prereq_groups if g]
         if fid in self.cv_items:
             for it in self.cv_items[fid].values():
                 self.canvas.delete(it)
@@ -1481,9 +1627,14 @@ class HOI4Editor:
             L.append("        y = " + str(f.y))
             L.append("        cost = " + str(f.cost))
             L.append("        ai_will_do = { factor = 1 }")
-            for pre in f.prerequisites:
-                if pre in self.focuses:
-                    L.append("        prerequisite = { focus = " + pre + " }")
+            for group in f.prereq_groups:
+                valid = [p for p in group if p in self.focuses and p != f.id]
+                if not valid:
+                    continue
+                L.append("        prerequisite = {")
+                for p in valid:
+                    L.append("            focus = " + p)
+                L.append("        }")
             L.append("        completion_reward = {")
             if f.effects.strip():
                 for line in f.effects.strip().splitlines():
