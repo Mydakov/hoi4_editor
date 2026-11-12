@@ -17,7 +17,29 @@ try:
 except ImportError:
     HAS_PIL = False
 
+# ============================================================ Тема
+# Палитра
+C_BG        = "#0a0a0f"   # почти чёрный с синим оттенком — фон приложения
+C_SURFACE   = "#12121a"   # панели
+C_SURFACE_2 = "#1a1a25"   # карточки, поля ввода
+C_BORDER    = "#2a2a3a"   # обычные границы
 
+# Неон — 4 акцента. Использовать по одному на роль, не смешивать.
+C_CYAN      = "#00f0ff"   # главный акцент: активное, hover, заголовки
+C_MAGENTA   = "#ff00aa"   # опасное, удаление, предупреждения
+C_YELLOW    = "#ffe600"   # важное: стоимость, счётчики
+C_GREEN     = "#00ff88"   # успех, сохранено
+
+# Текст
+C_TEXT      = "#e0e0f0"
+C_TEXT_MUT  = "#6a6a8a"
+
+# Шрифты: моно — для данных, sans — для заголовков
+FONT_TITLE  = ("Consolas", 13, "bold")
+FONT_H2     = ("Consolas", 11, "bold")
+FONT_BODY   = ("Segoe UI", 10)
+FONT_HINT   = ("Segoe UI", 9, "italic")
+FONT_MONO   = ("Consolas", 9)
 # ===================================================== Tooltip
 
 class Tooltip:
@@ -265,9 +287,134 @@ class HOI4Editor:
     GRID_Y = 160
     FW = 220
     FH = 120
+    def _apply_theme(self):
+        style = ttk.Style()
+        for t in ("clam", "vista", "default"):
+            if t in style.theme_names():
+                style.theme_use(t); break
 
+        # --- база
+        style.configure(".",
+            background=C_SURFACE, foreground=C_TEXT, font=FONT_BODY,
+            bordercolor=C_BORDER, lightcolor=C_BORDER, darkcolor=C_BORDER,
+            troughcolor=C_BG)
+        style.configure("TFrame", background=C_SURFACE)
+        style.configure("TLabel", background=C_SURFACE, foreground=C_TEXT)
+        style.configure("Title.TLabel",
+            font=FONT_TITLE, foreground=C_CYAN, background=C_SURFACE)
+        style.configure("Hint.TLabel",
+            font=FONT_HINT, foreground=C_TEXT_MUT, background=C_SURFACE)
+        style.configure("Mono.TLabel",
+            font=FONT_MONO, foreground=C_TEXT, background=C_SURFACE)
+
+        # --- Notebook (табы вкладок)
+        style.configure("TNotebook",
+            background=C_BG, borderwidth=0, tabmargins=(8, 8, 0, 0))
+        style.configure("TNotebook.Tab",
+            padding=(16, 8), font=FONT_H2,
+            background=C_BG, foreground=C_TEXT_MUT, borderwidth=0)
+        style.map("TNotebook.Tab",
+            background=[("selected", C_SURFACE), ("!selected", C_BG)],
+            foreground=[("selected", C_CYAN), ("!selected", C_TEXT_MUT)],
+            expand=[("selected", (0, 0, 0, 2))])  # подсветка снизу
+
+        # --- Кнопки (обычные)
+        style.configure("TButton",
+            padding=(12, 6), font=FONT_BODY,
+            background=C_SURFACE_2, foreground=C_TEXT,
+            borderwidth=1, relief="flat", focusthickness=0)
+        style.map("TButton",
+            background=[("active", C_BORDER), ("pressed", C_BORDER)],
+            foreground=[("active", C_CYAN), ("pressed", C_CYAN)],
+            bordercolor=[("active", C_CYAN)])
+
+        # --- Акцентная кнопка (главное действие — экспорт)
+        style.configure("Accent.TButton",
+            background=C_SURFACE_2, foreground=C_CYAN,
+            font=(FONT_BODY[0], FONT_BODY[1], "bold"),
+            padding=(14, 8), borderwidth=1)
+        style.map("Accent.TButton",
+            background=[("active", "#002a33"), ("pressed", "#003a44")],
+            foreground=[("active", C_CYAN), ("pressed", "#80faff")],
+            bordercolor=[("!disabled", C_CYAN), ("active", C_CYAN)])
+
+        # --- Опасная кнопка (удалить)
+        style.configure("Danger.TButton", foreground=C_MAGENTA)
+        style.map("Danger.TButton",
+            foreground=[("active", "#ff55cc")],
+            bordercolor=[("active", C_MAGENTA)])
+
+        # --- Успешная (сохранить/применить)
+        style.configure("Success.TButton", foreground=C_GREEN)
+        style.map("Success.TButton",
+            foreground=[("active", "#55ffaa")],
+            bordercolor=[("active", C_GREEN)])
+
+        # --- Поля ввода: тёмные с циановым фокусом
+        style.configure("TEntry",
+            fieldbackground=C_SURFACE_2, foreground=C_TEXT,
+            insertcolor=C_CYAN, padding=(8, 5),
+            bordercolor=C_BORDER, lightcolor=C_BORDER, darkcolor=C_BORDER)
+        style.map("TEntry",
+            bordercolor=[("focus", C_CYAN)],
+            lightcolor=[("focus", C_CYAN)],
+            darkcolor=[("focus", C_CYAN)])
+
+        style.configure("TCombobox",
+            fieldbackground=C_SURFACE_2, background=C_SURFACE_2,
+            foreground=C_TEXT, arrowcolor=C_CYAN, padding=(6, 4))
+        style.map("TCombobox",
+            fieldbackground=[("readonly", C_SURFACE_2)],
+            foreground=[("readonly", C_TEXT)],
+            bordercolor=[("focus", C_CYAN)])
+
+        style.configure("TSpinbox",
+            fieldbackground=C_SURFACE_2, background=C_SURFACE_2,
+            foreground=C_TEXT, arrowcolor=C_CYAN, padding=(4, 4))
+        style.map("TSpinbox",
+            fieldbackground=[("readonly", C_SURFACE_2)],
+            foreground=[("readonly", C_TEXT)],
+            bordercolor=[("focus", C_CYAN)])
+
+        style.configure("TCheckbutton",
+            background=C_SURFACE, foreground=C_TEXT, font=FONT_BODY)
+        style.map("TCheckbutton",
+            background=[("active", C_SURFACE)],
+            foreground=[("active", C_CYAN)],
+            indicatorcolor=[("selected", C_CYAN), ("!selected", C_SURFACE_2)])
+
+        style.configure("TRadiobutton",
+            background=C_SURFACE, foreground=C_TEXT, font=FONT_BODY)
+        style.map("TRadiobutton",
+            background=[("active", C_SURFACE)],
+            foreground=[("active", C_CYAN), ("selected", C_CYAN)],
+            indicatorcolor=[("selected", C_CYAN), ("!selected", C_SURFACE_2)])
+
+        # --- Скроллбары — тонкие, циановые
+        style.configure("TScrollbar",
+            background=C_BG, troughcolor=C_BG,
+            bordercolor=C_BG, arrowcolor=C_CYAN,
+            gripcount=0, arrowsize=12)
+        style.map("TScrollbar",
+            background=[("active", C_BORDER)])
+
+        # --- Treeview (для OR-предпосылок из прошлого патча)
+        style.configure("Treeview",
+            background=C_SURFACE_2, fieldbackground=C_SURFACE_2,
+            foreground=C_TEXT, font=FONT_MONO,
+            bordercolor=C_BORDER, rowheight=22)
+        style.configure("Treeview.Heading",
+            background=C_SURFACE, foreground=C_CYAN, font=FONT_H2)
+        style.map("Treeview",
+            background=[("selected", "#002a33")],
+            foreground=[("selected", C_CYAN)])
+
+        # --- Фон окна
+        self.root.configure(bg=C_BG)
+        
     def __init__(self, root):
         self.root = root
+        self._apply_theme()
         self.root.title("HOI4 Focus & Idea Editor v2.0")
         self.root.geometry("1500x900")
         self.root.minsize(1150, 650)
@@ -289,7 +436,6 @@ class HOI4Editor:
         self.mod_tag = "GER"
         self.tree_id = "my_focus_tree"
         self.mod_factor = 100
-
         self._build_ui()
         self._draw_grid()
         if HAS_PIL:
@@ -340,11 +486,18 @@ class HOI4Editor:
                        "Documents/Paradox Interactive/Hearts of Iron IV/mod/")
 
         self.status_var = tk.StringVar(value="Готово")
-        ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN,
-                  anchor=tk.W, padding=(6, 2)).pack(side=tk.BOTTOM, fill=tk.X)
+        lbl_status = tk.Label(self.root, textvariable=self.status_var,
+            anchor=tk.W, padx=8, pady=4,
+            bg="#000000", fg=C_GREEN,
+            font=FONT_MONO, relief=tk.FLAT)
+        lbl_status.pack(side=tk.BOTTOM, fill=tk.X)
+
         self.hint_var = tk.StringVar(value="")
-        ttk.Label(self.root, textvariable=self.hint_var, anchor=tk.W,
-                  padding=(6, 4), foreground="#1144aa").pack(side=tk.BOTTOM, fill=tk.X)
+        lbl_hint = tk.Label(self.root, textvariable=self.hint_var,
+            anchor=tk.W, padx=8, pady=4,
+            bg=C_SURFACE_2, fg=C_CYAN,
+            font=FONT_MONO, relief=tk.FLAT)
+        lbl_hint.pack(side=tk.BOTTOM, fill=tk.X)
 
         nb = ttk.Notebook(self.root)
         nb.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
@@ -405,7 +558,7 @@ class HOI4Editor:
         paned.add(center, weight=1)
         cw = ttk.Frame(center)
         cw.pack(fill=tk.BOTH, expand=True)
-        self.canvas = tk.Canvas(cw, bg="#2b2b2b",
+        self.canvas = tk.Canvas(cw, bg= C_BG,
                                 scrollregion=(0, 0, 4000, 2600),
                                 highlightthickness=0)
         hs = ttk.Scrollbar(cw, orient=tk.HORIZONTAL, command=self.canvas.xview)
@@ -620,10 +773,20 @@ class HOI4Editor:
     # ---------- холст ----------
 
     def _draw_grid(self):
-        for x in range(0, 4000, 60):
-            self.canvas.create_line(x, 0, x, 2600, fill="#363636", tags="grid")
-        for y in range(0, 2600, 60):
-            self.canvas.create_line(0, y, 4000, y, fill="#363636", tags="grid")
+        # Сетка из двух слоёв: мелкая тусклая + крупная ярче
+        for x in range(0, 4000, 40):
+            self.canvas.create_line(x, 0, x, 2600,
+                fill="#14141e", tags="grid")
+        for y in range(0, 2600, 40):
+            self.canvas.create_line(0, y, 4000, y,
+                fill="#14141e", tags="grid")
+        # Крупная сетка — по GRID_X / GRID_Y
+        for x in range(0, 4000, self.GRID_X):
+            self.canvas.create_line(x, 0, x, 2600,
+                fill="#1e1e2e", tags="grid")
+        for y in range(0, 2600, self.GRID_Y):
+            self.canvas.create_line(0, y, 4000, y,
+                fill="#1e1e2e", tags="grid")
         self.canvas.tag_lower("grid")
 
     def _focus_coords(self, f):
@@ -640,15 +803,38 @@ class HOI4Editor:
             del self.focus_previews[f.id]
 
         x1, y1, x2, y2 = self._focus_coords(f)
-        outline = "#ffd700" if f.id == self.selected_focus else "#7a7a7a"
-        width = 3 if f.id == self.selected_focus else 2
-        items = {}
+        selected = (f.id == self.selected_focus)
 
-        items["rect"] = self.canvas.create_rectangle(
-            x1, y1, x2, y2, fill="#3c3c3c", outline=outline, width=width,
+        # Внешний glow-слой (шире карточки, цвет по состоянию)
+        glow_color = C_CYAN if selected else "#1e2a30"
+        self.canvas.create_rectangle(x1 - 3, y1 - 3, x2 + 3, y2 + 3,
+            fill="", outline=glow_color, width=1,
             tags=("focus_" + f.id, "focus"))
 
-        # Иконка 64x64 слева сверху
+        # Основная карточка
+        fill = "#0f1a1f" if selected else C_SURFACE_2
+        outline = C_CYAN if selected else C_BORDER
+        width = 2 if selected else 1
+        items = {}
+        items["rect"] = self.canvas.create_rectangle(
+            x1, y1, x2, y2, fill=fill, outline=outline, width=width,
+            tags=("focus_" + f.id, "focus"))
+
+        # Угловые "скобки" — киберпанк-деталь
+        cx_len = 14
+        for (ax, ay, adx, ady) in (
+            (x1, y1, 1, 1), (x2, y1, -1, 1),
+            (x1, y2, 1, -1), (x2, y2, -1, -1)):
+            self.canvas.create_line(
+                ax, ay, ax + cx_len * adx, ay,
+                fill=C_CYAN if selected else C_BORDER, width=2,
+                tags=("focus_" + f.id, "focus"))
+            self.canvas.create_line(
+                ax, ay, ax, ay + cx_len * ady,
+                fill=C_CYAN if selected else C_BORDER, width=2,
+                tags=("focus_" + f.id, "focus"))
+
+        # Иконка
         ix1, iy1 = x1 + 8, y1 + 8
         ix2, iy2 = ix1 + 64, iy1 + 64
         preview = None
@@ -661,32 +847,36 @@ class HOI4Editor:
                 tags=("focus_" + f.id, "focus"))
         else:
             items["icon"] = self.canvas.create_rectangle(
-                ix1, iy1, ix2, iy2, fill="#2a2a2a", outline="#555", width=1,
+                ix1, iy1, ix2, iy2,
+                fill="#0a0f14", outline=C_BORDER, width=1,
                 tags=("focus_" + f.id, "focus"))
             items["icon_ph"] = self.canvas.create_text(
-                (ix1 + ix2) // 2, (iy1 + iy2) // 2, text="◆", fill="#666",
-                font=("Arial", 22, "bold"), tags=("focus_" + f.id, "focus"))
+                (ix1 + ix2) // 2, (iy1 + iy2) // 2, text="◆",
+                fill=C_CYAN if selected else C_TEXT_MUT,
+                font=("Consolas", 24, "bold"),
+                tags=("focus_" + f.id, "focus"))
 
-        # Заголовок
+        # Заголовок (циан, моно)
         title = f.title if f.title else f.id
         if len(title) > 26:
             title = title[:24] + "…"
         items["title"] = self.canvas.create_text(
-            x1 + 80, y1 + 18, text=title, fill="white",
-            font=("Arial", 11, "bold"), anchor="nw",
+            x1 + 80, y1 + 16, text=title,
+            fill=C_CYAN if selected else C_TEXT,
+            font=("Consolas", 10, "bold"), anchor="nw",
             width=x2 - x1 - 88, tags=("focus_" + f.id, "focus"))
 
-        # ID
+        # ID (приглушённый)
         id_show = f.id if len(f.id) <= 22 else f.id[:20] + "…"
         items["id"] = self.canvas.create_text(
-            x1 + 80, y1 + 52, text=id_show, fill="#aaaaaa",
-            font=("Arial", 8), anchor="nw",
+            x1 + 80, y1 + 48, text=id_show, fill=C_TEXT_MUT,
+            font=("Consolas", 8), anchor="nw",
             width=x2 - x1 - 88, tags=("focus_" + f.id, "focus"))
 
-        # Cost
+        # Стоимость — жёлтым, как в терминале
         items["cost"] = self.canvas.create_text(
-            x2 - 8, y2 - 8, text="★ " + str(f.cost), fill="#ffdd44",
-            font=("Arial", 10, "bold"), anchor="se",
+            x2 - 10, y2 - 10, text="★" + str(f.cost),
+            fill=C_YELLOW, font=("Consolas", 11, "bold"), anchor="se",
             tags=("focus_" + f.id, "focus"))
 
         self.cv_items[f.id] = items
@@ -694,30 +884,37 @@ class HOI4Editor:
     def _redraw_connections(self):
         self.canvas.delete("conn")
         for f in self.focuses.values():
-            for group in f.prereq_groups:
+            groups = f.prereq_groups if hasattr(f, "prereq_groups") else [[p] for p in getattr(f, "prerequisites", [])]
+            for group in groups:
                 valid = [p for p in group if p in self.focuses]
                 if not valid:
                     continue
                 is_or = len(valid) > 1
-                color = "#ffaa44" if is_or else "#88ccff"
-                dash = (6, 4) if is_or else None
+                color = C_MAGENTA if is_or else C_CYAN
+                dash = (5, 3) if is_or else None
+
                 for pre_id in valid:
                     p = self.focuses[pre_id]
                     sx = p.x * self.GRID_X + self.GRID_X // 2
                     sy = p.y * self.GRID_Y + self.GRID_Y // 2 + self.FH // 2
                     ex = f.x * self.GRID_X + self.GRID_X // 2
                     ey = f.y * self.GRID_Y + self.GRID_Y // 2 - self.FH // 2
-                    if abs(sx - ex) < 2:
-                        self.canvas.create_line(sx, sy, ex, ey, fill=color, width=2,
-                                                 arrow=tk.LAST, dash=dash, tags="conn")
-                    else:
-                        my = (sy + ey) / 2
-                        self.canvas.create_line(sx, sy, sx, my, fill=color, width=2,
-                                                 dash=dash, tags="conn")
-                        self.canvas.create_line(sx, my, ex, my, fill=color, width=2,
-                                                 dash=dash, tags="conn")
-                        self.canvas.create_line(ex, my, ex, ey, fill=color, width=2,
-                                                 arrow=tk.LAST, dash=dash, tags="conn")
+
+                    # Двойная линия = имитация "свечения" вокруг
+                    for (w, col) in ((4, "#003a44" if not is_or else "#44002a"), (2, color)):
+                        if abs(sx - ex) < 2:
+                            self.canvas.create_line(sx, sy, ex, ey,
+                                fill=col, width=w, arrow=tk.LAST,
+                                dash=dash, tags="conn")
+                        else:
+                            my = (sy + ey) / 2
+                            self.canvas.create_line(sx, sy, sx, my,
+                                fill=col, width=w, dash=dash, tags="conn")
+                            self.canvas.create_line(sx, my, ex, my,
+                                fill=col, width=w, dash=dash, tags="conn")
+                            self.canvas.create_line(ex, my, ex, ey,
+                                fill=col, width=w, arrow=tk.LAST,
+                                dash=dash, tags="conn")
         self.canvas.tag_lower("conn")
         self.canvas.tag_lower("grid")
         
@@ -821,14 +1018,15 @@ class HOI4Editor:
 
     def _highlight(self, fid, color):
         if fid in self.cv_items:
-            self.canvas.itemconfig(self.cv_items[fid]["rect"], outline=color, width=3)
+            self.canvas.itemconfig(self.cv_items[fid]["rect"],
+                outline=C_MAGENTA, width=2)
 
     def _unhighlight(self, fid):
         if fid in self.cv_items:
-            color = "#ffd700" if fid == self.selected_focus else "#7a7a7a"
-            width = 3 if fid == self.selected_focus else 2
-            self.canvas.itemconfig(self.cv_items[fid]["rect"], outline=color, width=width)
-
+            sel = (fid == self.selected_focus)
+            self.canvas.itemconfig(self.cv_items[fid]["rect"],
+                outline=C_CYAN if sel else C_BORDER,
+                width=2 if sel else 1)
     # ---------- данные фокусов ----------
 
     def focus_select(self, fid):
@@ -1680,23 +1878,63 @@ class HOI4Editor:
         L.append("}")
         with open(os.path.join(ideas_dir, self.mod_folder + "_ideas.txt"), "w", encoding="utf-8") as fp:
             fp.write("\n".join(L))
+    def _convert_image_to_dds(self, src_path, dest_dir, base_name, target_size):
+        """
+        Приводит любое изображение к HOI4-совместимому виду:
+        - ресайз с сохранением пропорций (letterbox, без растяжения),
+        - альфа-канал RGBA,
+        - сохранение как .dds (DXT5 через Pillow).
+        Возвращает (относительный_путь_в_моде, фактическое_расширение).
+        """
+        os.makedirs(dest_dir, exist_ok=True)
+        target_w, target_h = target_size
 
+        # --- без Pillow: только копия (если исходник уже правильного размера)
+        if not HAS_PIL:
+            ext = os.path.splitext(src_path)[1].lower() or ".png"
+            dest_name = base_name + ext
+            shutil.copy2(src_path, os.path.join(dest_dir, dest_name))
+            return dest_name, ext
+
+        img = Image.open(src_path).convert("RGBA")
+        src_w, src_h = img.size
+
+        # Вписываем в целевое окно БЕЗ искажения пропорций
+        ratio = min(target_w / src_w, target_h / src_h)
+        new_w = max(1, int(src_w * ratio))
+        new_h = max(1, int(src_h * ratio))
+        resized = img.resize((new_w, new_h), Image.LANCZOS)
+
+        # Центрируем на прозрачном холсте
+        canvas = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+        canvas.paste(resized, ((target_w - new_w) // 2, (target_h - new_h) // 2), resized)
+
+        # --- пробуем DDS
+        dds_name = base_name + ".dds"
+        dds_path = os.path.join(dest_dir, dds_name)
+        try:
+            canvas.save(dds_path, format="DDS")
+            return dds_name, ".dds"
+        except Exception:
+            # --- fallback: правильно-размерный PNG
+            png_name = base_name + ".png"
+            png_path = os.path.join(dest_dir, png_name)
+            canvas.save(png_path, format="PNG")
+            return png_name, ".png"
+        
     def _copy_focus_images(self, mod_dir):
-        """Копирует свои картинки фокусов в мод и создаёт .gfx. Возвращает кол-во."""
+        """Копирует и конвертирует картинки фокусов; генерирует .gfx."""
         gfx_dir = os.path.join(mod_dir, "gfx", "interface", "goals", "custom")
         copied = []
         for f in self.focuses.values():
             if not f.image_file or not os.path.exists(f.image_file):
                 continue
-            os.makedirs(gfx_dir, exist_ok=True)
-            ext = os.path.splitext(f.image_file)[1].lower() or ".dds"
-            dest_name = f.id + ext
-            dest_path = os.path.join(gfx_dir, dest_name)
             try:
-                shutil.copy2(f.image_file, dest_path)
-                copied.append((f.icon, "gfx/interface/goals/custom/" + dest_name))
-            except Exception:
-                pass
+                fname, ext = self._convert_image_to_dds(
+                    f.image_file, gfx_dir, f.id, (156, 108))
+                copied.append((f.icon, "gfx/interface/goals/custom/" + fname))
+            except Exception as e:
+                print("Focus img error:", f.id, e)
         if copied:
             gfx_path = os.path.join(gfx_dir, "custom_focus_icons.gfx")
             with open(gfx_path, "w", encoding="utf-8") as fp:
@@ -1710,20 +1948,18 @@ class HOI4Editor:
         return len(copied)
 
     def _copy_idea_images(self, mod_dir):
+        """Копирует и конвертирует картинки идей; генерирует .gfx."""
         gfx_dir = os.path.join(mod_dir, "gfx", "interface", "ideas", "custom")
         copied = []
         for idea in self.ideas.values():
             if not idea.image_file or not os.path.exists(idea.image_file):
                 continue
-            os.makedirs(gfx_dir, exist_ok=True)
-            ext = os.path.splitext(idea.image_file)[1].lower() or ".dds"
-            dest_name = idea.id + ext
-            dest_path = os.path.join(gfx_dir, dest_name)
             try:
-                shutil.copy2(idea.image_file, dest_path)
-                copied.append((idea.picture, "gfx/interface/ideas/custom/" + dest_name))
-            except Exception:
-                pass
+                fname, ext = self._convert_image_to_dds(
+                    idea.image_file, gfx_dir, idea.id, (65, 65))
+                copied.append((idea.picture, "gfx/interface/ideas/custom/" + fname))
+            except Exception as e:
+                print("Idea img error:", idea.id, e)
         if copied:
             gfx_path = os.path.join(gfx_dir, "custom_idea_icons.gfx")
             with open(gfx_path, "w", encoding="utf-8") as fp:
